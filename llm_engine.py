@@ -4,8 +4,10 @@ This module handles the backend processing of uploaded documents.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 import mimetypes
+import requests
+import llm_config
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -84,6 +86,88 @@ def extract_text_from_file(file_path: str) -> str:
         return f"[Error reading file: {str(e)}]"
 
 
+def call_llm_chat_completion(
+    messages: List[Dict[str, str]], system_prompt: Optional[str] = None
+) -> str:
+    try:
+        api_messages = []
+        if system_prompt:
+            api_messages.append({"role": "system", "content": system_prompt})
+        api_messages.extend(messages)
+
+        url = f"{llm_config.LLM_BASE_URL}{llm_config.CHAT_COMPLETIONS_ENDPOINT}"
+        headers = {"Content-Type": "application/json"}
+        if llm_config.LLM_API_KEY:
+            headers["Authorization"] = f"Bearer {llm_config.LLM_API_KEY}"
+
+        payload = {
+            "model": llm_config.LLM_MODEL,
+            "messages": api_messages,
+            "temperature": llm_config.TEMPERATURE,
+            "max_tokens": llm_config.MAX_TOKENS,
+            "stream": llm_config.STREAM,
+        }
+        
+        if llm_config.MAX_TOKENS > 0:
+            payload["top_p"] = llm_config.TOP_P
+
+        response = requests.post(
+            url, json=payload, headers=headers, timeout=llm_config.REQUEST_TIMEOUT
+        )
+        
+        if response.status_code != 200:
+            try:
+                error_detail = response.json()
+                error_msg = error_detail.get("error", {}).get("message", response.text)
+                return f"[Error: LLM API returned error (Status {response.status_code}): {error_msg}]"
+            except:
+                return f"[Error: LLM API returned error (Status {response.status_code}): {response.text}]"
+        
+        response_data = response.json()
+        if "choices" in response_data and len(response_data["choices"]) > 0:
+            return response_data["choices"][0]["message"]["content"]
+        else:
+            return "[Error: No response from LLM]"
+
+    except requests.exceptions.ConnectionError:
+        return f"[Error: Could not connect to LLM. Is LM Studio running at {llm_config.LLM_BASE_URL}?]"
+    except requests.exceptions.Timeout:
+        return "[Error: LLM request timed out]"
+    except requests.exceptions.RequestException as e:
+        return f"[Error: Request failed: {str(e)}]"
+    except Exception as e:
+        return f"[Error calling LLM: {str(e)}]"
+
+
+def process_checklist_with_llm(checklist_text: str) -> str:
+    max_chars = 6000
+    
+    if len(checklist_text) > max_chars:
+        checklist_text = checklist_text[:max_chars] + "\n\n[... document truncated due to length ...]"
+    
+    system_prompt = """You are an expert at extracting and structuring peer review checklists from documents. 
+Your task is to analyze the provided checklist document and extract all checklist items, criteria, and evaluation points.
+
+Format your response as clear, actionable bullet points organized by categories if present.
+Each item should be a specific, actionable instruction or criterion that can be used for peer review.
+
+If the document contains categories or sections, organize the checklist items under those categories.
+Use markdown formatting with bullet points (-) and sub-bullets if needed."""
+
+    user_prompt = f"""Please extract and structure the checklist items from the following peer review checklist document:
+
+{checklist_text}
+
+Provide a well-organized, structured checklist with clear bullet points that can be used for evaluating manuscripts."""
+
+    messages = [{"role": "user", "content": user_prompt}]
+    structured_checklist = call_llm_chat_completion(messages, system_prompt=system_prompt)
+    
+    print(f"\nStructured Checklist from LLM:\n{structured_checklist}\n")
+    
+    return structured_checklist
+
+
 def process_peer_review(
     manuscript_path: str, checklist_path: str, manuscript_name: str, checklist_name: str
 ) -> str:
@@ -99,37 +183,17 @@ def process_peer_review(
     Returns:
         Processed result as formatted string
     """
-    # Extract text from both PDFs
     manuscript_text = extract_text_from_pdf(manuscript_path)
     checklist_text = extract_text_from_pdf(checklist_path)
 
-    # Print to console for debugging
-    print(f"\n{'='*80}")
-    print(f"Processing Peer Review")
-    print(f"{'='*80}")
-    print(f"\nManuscript: {manuscript_name}")
-    print(f"Content Length: {len(manuscript_text)} characters")
-    print(f"\nChecklist: {checklist_name}")
-    print(f"Content Length: {len(checklist_text)} characters")
-    print(f"{'='*80}")
-    print("\nManuscript Content:")
-    print("-" * 80)
-    print(
-        manuscript_text[:1000] + "..."
-        if len(manuscript_text) > 1000
-        else manuscript_text
-    )
-    print("-" * 80)
-    print("\nChecklist Content:")
-    print("-" * 80)
-    print(checklist_text)
-    print("-" * 80)
-    print(f"{'='*80}\n")
+    print(f"\nProcessing: {manuscript_name} ({len(manuscript_text)} chars) + {checklist_name} ({len(checklist_text)} chars)")
 
-    # Basic processing (placeholder for actual LLM integration)
-    # TODO: Integrate with your preferred LLM API for peer review
+    structured_checklist = process_checklist_with_llm(checklist_text)
 
-    # For now, return a formatted summary
+    if structured_checklist.startswith("[Error"):
+        structured_checklist = f"**Raw Checklist Text:**\n\n{checklist_text[:1000]}{'...' if len(checklist_text) > 1000 else ''}"
+
+    # For now, return a formatted summary with structured checklist
     result = f"""
 ### Peer Review Processing
 
@@ -140,21 +204,21 @@ def process_peer_review(
 
 ---
 
+### Structured Checklist (from LLM)
+
+{structured_checklist}
+
+---
+
 ### Manuscript Preview
 
 {manuscript_text[:500]}{"..." if len(manuscript_text) > 500 else ""}
 
 ---
 
-### Checklist Preview
-
-{checklist_text[:500]}{"..." if len(checklist_text) > 500 else ""}
-
----
-
 ### Next Steps
 
-Peer review analysis will be performed here based on the checklist criteria.
+The structured checklist above will be used to evaluate the manuscript in the next step.
 """
 
     return result
