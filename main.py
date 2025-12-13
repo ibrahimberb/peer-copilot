@@ -3,6 +3,15 @@ from pathlib import Path
 from llm_engine import process_peer_review, extract_text_from_pdf
 import shutil
 
+# ============================================================================
+# Demo Files Configuration
+# ============================================================================
+DEMO_MANUSCRIPT = "BurnRAG_draft.pdf"
+DEMO_CHECKLIST = "peer_review-checklist.pdf"
+DEMO_FOLDER = Path("demo")
+TEMP_FOLDER = Path("temp_uploads")
+
+# ============================================================================
 # Page configuration
 st.set_page_config(
     page_title="Peer Copilot - AI Peer Review",
@@ -50,11 +59,10 @@ st.markdown(
 
 def load_demo_file(demo_path: str, file_name: str):
     """Load a demo file from the demo folder."""
-    demo_file_path = Path("demo") / demo_path
+    demo_file_path = DEMO_FOLDER / demo_path
     if demo_file_path.exists():
-        temp_dir = Path("temp_uploads")
-        temp_dir.mkdir(exist_ok=True)
-        temp_path = temp_dir / file_name
+        TEMP_FOLDER.mkdir(exist_ok=True)
+        temp_path = TEMP_FOLDER / file_name
 
         # Copy demo file to temp_uploads
         shutil.copy2(demo_file_path, temp_path)
@@ -96,13 +104,13 @@ def main():
                 "📄 Demo Manuscript", use_container_width=True, key="demo_manuscript"
             ):
                 file_bytes, file_name = load_demo_file(
-                    "Who_benefits_from_alignment_2026_AAAI_RSD.pdf",
-                    "Who_benefits_from_alignment_2026_AAAI_RSD.pdf",
+                    DEMO_MANUSCRIPT,
+                    DEMO_MANUSCRIPT,
                 )
                 if file_bytes:
                     st.session_state.manuscript_file = file_bytes
                     st.session_state.manuscript_path = str(
-                        Path("temp_uploads") / file_name
+                        TEMP_FOLDER / file_name
                     )
                     st.success("Demo manuscript loaded!")
                     st.rerun()
@@ -112,12 +120,12 @@ def main():
                 "✅ Demo Checklist", use_container_width=True, key="demo_checklist"
             ):
                 file_bytes, file_name = load_demo_file(
-                    "peer_review-checklist.pdf", "peer_review-checklist.pdf"
+                    DEMO_CHECKLIST, DEMO_CHECKLIST
                 )
                 if file_bytes:
                     st.session_state.checklist_file = file_bytes
                     st.session_state.checklist_path = str(
-                        Path("temp_uploads") / file_name
+                        TEMP_FOLDER / file_name
                     )
                     st.success("Demo checklist loaded!")
                     st.rerun()
@@ -126,17 +134,17 @@ def main():
             "📚 Load Both Demo Files", use_container_width=True, key="demo_both"
         ):
             ms_bytes, ms_name = load_demo_file(
-                "Who_benefits_from_alignment_2026_AAAI_RSD.pdf",
-                "Who_benefits_from_alignment_2026_AAAI_RSD.pdf",
+                DEMO_MANUSCRIPT,
+                DEMO_MANUSCRIPT,
             )
             cl_bytes, cl_name = load_demo_file(
-                "peer_review-checklist.pdf", "peer_review-checklist.pdf"
+                DEMO_CHECKLIST, DEMO_CHECKLIST,
             )
             if ms_bytes and cl_bytes:
                 st.session_state.manuscript_file = ms_bytes
-                st.session_state.manuscript_path = str(Path("temp_uploads") / ms_name)
+                st.session_state.manuscript_path = str(TEMP_FOLDER / ms_name)
                 st.session_state.checklist_file = cl_bytes
-                st.session_state.checklist_path = str(Path("temp_uploads") / cl_name)
+                st.session_state.checklist_path = str(TEMP_FOLDER / cl_name)
                 st.success("Both demo files loaded!")
                 st.rerun()
 
@@ -188,48 +196,45 @@ def main():
             manuscript_name = (
                 uploaded_manuscript.name
                 if uploaded_manuscript
-                else "Who_benefits_from_alignment_2026_AAAI_RSD.pdf"
+                else DEMO_MANUSCRIPT
             )
             checklist_name = (
                 uploaded_checklist.name
                 if uploaded_checklist
-                else "peer_review-checklist.pdf"
+                else DEMO_CHECKLIST
             )
 
             if st.button("🚀 Start Review", use_container_width=True, type="primary"):
                 with st.spinner("Processing peer review..."):
                     try:
-                        temp_dir = Path("temp_uploads")
-                        temp_dir.mkdir(exist_ok=True)
+                        TEMP_FOLDER.mkdir(exist_ok=True)
 
                         # Save manuscript
                         if uploaded_manuscript:
-                            manuscript_path = temp_dir / uploaded_manuscript.name
+                            manuscript_path = TEMP_FOLDER / uploaded_manuscript.name
                             with open(manuscript_path, "wb") as f:
                                 f.write(st.session_state.manuscript_file)
                             st.session_state.manuscript_path = str(manuscript_path)
                             manuscript_name = uploaded_manuscript.name
                         else:
                             # Demo file already in temp_uploads
-                            manuscript_name = (
-                                "Who_benefits_from_alignment_2026_AAAI_RSD.pdf"
-                            )
+                            manuscript_name = DEMO_MANUSCRIPT
                             st.session_state.manuscript_path = str(
-                                temp_dir / manuscript_name
+                                TEMP_FOLDER / manuscript_name
                             )
 
                         # Save checklist
                         if uploaded_checklist:
-                            checklist_path = temp_dir / uploaded_checklist.name
+                            checklist_path = TEMP_FOLDER / uploaded_checklist.name
                             with open(checklist_path, "wb") as f:
                                 f.write(st.session_state.checklist_file)
                             st.session_state.checklist_path = str(checklist_path)
                             checklist_name = uploaded_checklist.name
                         else:
                             # Demo file already in temp_uploads
-                            checklist_name = "peer_review-checklist.pdf"
+                            checklist_name = DEMO_CHECKLIST
                             st.session_state.checklist_path = str(
-                                temp_dir / checklist_name
+                                TEMP_FOLDER / checklist_name
                             )
 
                         # Process peer review
