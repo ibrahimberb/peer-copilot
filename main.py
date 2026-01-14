@@ -1,6 +1,6 @@
 import streamlit as st
 from pathlib import Path
-from llm_engine import process_peer_review, extract_text_from_pdf
+from llm_engine import process_peer_review, extract_text_from_pdf, evaluate_manuscript_with_checklist
 import shutil
 
 # ============================================================================
@@ -90,6 +90,12 @@ def main():
         st.session_state.checklist_path = None
     if "last_result" not in st.session_state:
         st.session_state.last_result = ""
+    if "checklist_items" not in st.session_state:
+        st.session_state.checklist_items = []
+    if "review_results" not in st.session_state:
+        st.session_state.review_results = []
+    if "evaluation_complete" not in st.session_state:
+        st.session_state.evaluation_complete = False
 
     # Sidebar - File Upload
     with st.sidebar:
@@ -238,7 +244,7 @@ def main():
                             )
 
                         # Process peer review
-                        result = process_peer_review(
+                        result, checklist_items = process_peer_review(
                             manuscript_path=st.session_state.manuscript_path,
                             checklist_path=st.session_state.checklist_path,
                             manuscript_name=manuscript_name,
@@ -246,6 +252,10 @@ def main():
                         )
 
                         st.session_state.last_result = result
+                        st.session_state.checklist_items = checklist_items
+                        st.session_state.evaluation_complete = False
+                        
+                        st.success("✅ Checklist extracted! Now evaluating manuscript...")
 
                         # Clean up temp files
                         if (
@@ -284,6 +294,105 @@ def main():
 
     if st.session_state.last_result:
         st.markdown(st.session_state.last_result)
+        
+        # Show extracted checklist items (ALWAYS visible after extraction)
+        if st.session_state.checklist_items:
+            st.markdown("---")
+            st.subheader("📋 Structured Checklist Items (Interactive)")
+            
+            with st.expander(f"View {len(st.session_state.checklist_items)} Checklist Items", expanded=True):
+                # Group by section
+                sections = {}
+                for item in st.session_state.checklist_items:
+                    section = item['section']
+                    if section not in sections:
+                        sections[section] = []
+                    sections[section].append(item)
+                
+                # Display by section
+                for section, items in sections.items():
+                    st.markdown(f"**{section}**")
+                    for idx, item in enumerate(items):
+                        indent = "  " if item['type'] == 'sub' else ""
+                        icon = "❓" if item['is_question'] else "📌"
+                        st.markdown(f"{indent}{icon} {item['item']}")
+                    st.markdown("")
+    
+    # Auto-trigger evaluation BELOW the checklist display
+    if (st.session_state.checklist_items and 
+        not st.session_state.evaluation_complete and
+        st.session_state.manuscript_path and
+        st.session_state.checklist_path):
+        
+        st.markdown("---")
+        st.header("🤖 Evaluating Manuscript")
+        
+        # Progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        current_item_display = st.empty()
+        
+        total_items = len(st.session_state.checklist_items)
+        
+        def update_progress(current, total, item_name):
+            progress = current / total
+            progress_bar.progress(progress)
+            status_text.markdown(f"**Processing item {current} of {total}**")
+            current_item_display.info(f"💭 Thinking about: *{item_name}*")
+        
+        # Read manuscript text
+        manuscript_text = extract_text_from_pdf(st.session_state.manuscript_path)
+        
+        # Evaluate with checklist
+        review_results_path = TEMP_FOLDER / "review_results.json"
+        review_results = evaluate_manuscript_with_checklist(
+            checklist_items=st.session_state.checklist_items,
+            manuscript_text=manuscript_text,
+            output_path=str(review_results_path),
+            progress_callback=update_progress
+        )
+        
+        # Store results
+        st.session_state.review_results = review_results
+        st.session_state.evaluation_complete = True
+        
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
+        current_item_display.empty()
+        
+        st.success(f"✅ Evaluation complete! Assessed {total_items} checklist items.")
+        st.rerun()
+        
+    # Display evaluation results if available
+    if st.session_state.review_results and st.session_state.evaluation_complete:
+        st.markdown("---")
+        st.subheader("📊 Detailed Evaluation Results")
+        
+        # Group results by section
+        sections = {}
+        for result in st.session_state.review_results:
+            section = result['section']
+            if section not in sections:
+                sections[section] = []
+            sections[section].append(result)
+        
+        # Display by section with expandable cards
+        for section, items in sections.items():
+            with st.expander(f"📁 {section} ({len(items)} items)", expanded=False):
+                for result in items:
+                    item_icon = "❓" if result['is_question'] else "📌"
+                    status_icon = "✅" if result['status'] == 'completed' else "❌"
+                    
+                    st.markdown(f"**{item_icon} {result['checklist_item']}**")
+                    
+                    # Display LLM evaluation
+                    if result['status'] == 'completed':
+                        st.markdown(f"**Evaluation:** {result['llm_evaluation']}")
+                    else:
+                        st.error(f"Error: {result['llm_evaluation']}")
+                    
+                    st.markdown("---")
     else:
         st.info(
             "Upload manuscript and checklist files, then click 'Start Review' to see results here."
