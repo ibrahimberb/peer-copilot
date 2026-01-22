@@ -1,6 +1,6 @@
 import streamlit as st
 from pathlib import Path
-from llm_engine import process_peer_review, extract_text_from_pdf, evaluate_manuscript_with_checklist
+from llm_engine import process_peer_review, extract_text_from_pdf, evaluate_manuscript_with_checklist, generate_final_consideration
 import shutil
 
 # ============================================================================
@@ -96,6 +96,8 @@ def main():
         st.session_state.review_results = []
     if "evaluation_complete" not in st.session_state:
         st.session_state.evaluation_complete = False
+    if "final_consideration" not in st.session_state:
+        st.session_state.final_consideration = None
 
     # Sidebar - File Upload
     with st.sidebar:
@@ -393,6 +395,76 @@ def main():
                         st.error(f"Error: {result['llm_evaluation']}")
                     
                     st.markdown("---")
+        
+        # Generate and display final consideration
+        if st.session_state.final_consideration is None:
+            st.markdown("---")
+            st.header("🤖 Generating Final Consideration")
+            
+            with st.spinner("Analyzing all results and generating final recommendation..."):
+                # Read manuscript text for context
+                manuscript_text = extract_text_from_pdf(st.session_state.manuscript_path)
+                
+                # Generate final consideration
+                final_consideration = generate_final_consideration(
+                    review_results=st.session_state.review_results,
+                    manuscript_text=manuscript_text
+                )
+                
+                st.session_state.final_consideration = final_consideration
+                st.rerun()
+        
+        # Display final consideration if available
+        if st.session_state.final_consideration:
+            st.markdown("---")
+            st.header("🎯 Final Consideration")
+            
+            final = st.session_state.final_consideration
+            
+            if final['status'] == 'completed':
+                # Determine color and emoji based on recommendation
+                recommendation = final['recommendation'].upper()
+                if recommendation == 'ACCEPT':
+                    badge_color = "#10b981"  # Green
+                    badge_emoji = "✅"
+                elif recommendation == 'MINOR REVISION':
+                    badge_color = "#f59e0b"  # Amber
+                    badge_emoji = "⚠️"
+                elif recommendation == 'MAJOR REVISION':
+                    badge_color = "#ef4444"  # Red
+                    badge_emoji = "🔴"
+                else:  # REJECT
+                    badge_color = "#dc2626"  # Dark Red
+                    badge_emoji = "❌"
+                
+                # Display recommendation with styling
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.markdown(
+                        f"""<div style="
+                            background-color: {badge_color};
+                            color: white;
+                            padding: 20px;
+                            border-radius: 10px;
+                            text-align: center;
+                            font-size: 20px;
+                            font-weight: bold;
+                        ">{badge_emoji} {recommendation}</div>""",
+                        unsafe_allow_html=True
+                    )
+                
+                with col2:
+                    st.metric(
+                        "Confidence Level",
+                        f"{final['confidence']}%",
+                        delta=None
+                    )
+                
+                st.markdown("### Reasoning")
+                st.info(final['reasoning'])
+            else:
+                st.error(f"Failed to generate final consideration: {final['reasoning']}")
     else:
         st.info(
             "Upload manuscript and checklist files, then click 'Start Review' to see results here."

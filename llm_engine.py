@@ -422,6 +422,97 @@ The structured checklist above will be used to evaluate the manuscript in the ne
     return result, checklist_items
 
 
+def generate_final_consideration(
+    review_results: List[Dict[str, any]],
+    manuscript_text: str
+) -> Dict[str, any]:
+    """
+    Generate a final consideration/recommendation based on all evaluation results.
+    
+    Args:
+        review_results: List of evaluation results from checklist items
+        manuscript_text: Full manuscript text
+        
+    Returns:
+        Dictionary with recommendation, confidence, and reasoning
+    """
+    # Prepare summary of evaluation results
+    total_items = len(review_results)
+    completed_items = sum(1 for r in review_results if r['status'] == 'completed')
+    error_items = total_items - completed_items
+
+    # Print sample of checklist items and evaluations (first 80 chars of item, first 150 chars of evaluation)
+    print("\n" + "="*80)
+    print("EVALUATION RESULTS SUMMARY")
+    # TODO: check here. we wanna use all characters?? not just :150?
+    print("="*80)
+    for r in review_results:
+        print(f"\n[{r['section']}] {r['checklist_item'][:80]}")
+        print(f"→ {r['llm_evaluation'][:150]}...")
+    print("="*80 + "\n")
+    
+    # Extract key evaluation points from ALL items
+    evaluations_summary = "\n".join([
+        f"- [{r['section']}] {r['checklist_item'][:80]}: {r['llm_evaluation'][:150]}..."
+        for r in review_results  # Use all evaluation results
+    ])
+    
+    system_prompt = """You are an expert academic peer review moderator. Your task is to synthesize all detailed evaluations and provide a final recommendation on whether to accept, minor revisions, major revisions, or reject the manuscript.
+
+Based on the evaluation results provided, you must:
+1. Assess the overall quality and readiness of the manuscript
+2. Provide a clear recommendation: ACCEPT, MINOR REVISION, MAJOR REVISION, or REJECT
+3. Rate your confidence in this recommendation (0-100%)
+4. Provide a brief justification for your decision
+
+Format your response as JSON with the following structure:
+{
+    "recommendation": "ACCEPT" | "MINOR REVISION" | "MAJOR REVISION" | "REJECT",
+    "confidence": <0-100>,
+    "reasoning": "<brief summary of key factors>"
+}"""
+    
+    user_prompt = f"""Based on the following evaluation results from the peer review checklist, provide a final recommendation:
+
+**Evaluation Summary:**
+Total Items Evaluated: {total_items}
+Successfully Completed: {completed_items}
+Errors: {error_items}
+
+**Key Findings:**
+{evaluations_summary}
+
+Provide your final consideration in the specified JSON format."""
+    
+    messages = [{"role": "user", "content": user_prompt}]
+    response = call_llm_chat_completion(messages, system_prompt=system_prompt)
+    
+    # Parse the JSON response
+    try:
+        # Extract JSON from response (in case LLM adds extra text)
+        import re
+        json_match = re.search(r'\{[^{}]*"recommendation"[^{}]*\}', response, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group())
+        else:
+            result = json.loads(response)
+            
+        return {
+            'recommendation': result.get('recommendation', 'UNKNOWN'),
+            'confidence': result.get('confidence', 0),
+            'reasoning': result.get('reasoning', 'Unable to determine'),
+            'status': 'completed'
+        }
+    except json.JSONDecodeError:
+        # Fallback if JSON parsing fails
+        return {
+            'recommendation': 'UNKNOWN',
+            'confidence': 0,
+            'reasoning': f'Failed to parse response: {response[:200]}',
+            'status': 'error'
+        }
+
+
 def analyze_document_with_llm(text_content: str, analysis_type: str = "summary") -> str:
     """
     Placeholder for LLM-based document analysis.
