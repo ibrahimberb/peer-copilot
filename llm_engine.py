@@ -451,8 +451,6 @@ def evaluate_manuscript_with_checklist(
         f"\n🔍 Starting manuscript evaluation with {total_items} checklist items...\n"
     )
 
-    st.info(f"Starting manuscript evaluation with {total_items} checklist items...")
-
     for idx, item in enumerate(checklist_items, 1):
         item_name = (
             item["item"][:60] + "..." if len(item["item"]) > 60 else item["item"]
@@ -566,7 +564,7 @@ def process_peer_review(
 The structured checklist above will be used to evaluate the manuscript in the next step.
 """
 
-    return result, checklist_items
+    return result, checklist_items, manuscript_text
 
 
 def generate_final_consideration(
@@ -589,7 +587,6 @@ def generate_final_consideration(
 
     # Print sample of checklist items and evaluations (first 80 chars of item, first 150 chars of evaluation)
     print("\n" + "=" * 80)
-    st.info("EVALUATION RESULTS SUMMARY")
     print("EVALUATION RESULTS SUMMARY")
     # TODO: check here. we wanna use all characters?? not just :150?
     print("=" * 80)

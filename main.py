@@ -2,7 +2,6 @@ import streamlit as st
 from pathlib import Path
 from llm_engine import (
     process_peer_review,
-    extract_text_from_pdf,
     evaluate_manuscript_with_checklist,
     generate_final_consideration,
 )
@@ -145,6 +144,8 @@ def main():
         st.session_state.final_consideration = None
     if "storage_initialized" not in st.session_state:
         st.session_state.storage_initialized = False
+    if "manuscript_text" not in st.session_state:
+        st.session_state.manuscript_text = ""
 
     # ── Storage initialization (runs once per session) ──────────────────────
     if not st.session_state.storage_initialized:
@@ -360,7 +361,7 @@ def main():
                             )
 
                         # Process peer review
-                        result, checklist_items = process_peer_review(
+                        result, checklist_items, manuscript_text = process_peer_review(
                             manuscript_path=st.session_state.manuscript_path,
                             checklist_path=st.session_state.checklist_path,
                             manuscript_name=manuscript_name,
@@ -369,6 +370,7 @@ def main():
 
                         st.session_state.last_result = result
                         st.session_state.checklist_items = checklist_items
+                        st.session_state.manuscript_text = manuscript_text
                         st.session_state.evaluation_complete = False
 
                         st.success(
@@ -443,8 +445,7 @@ def main():
     if (
         st.session_state.checklist_items
         and not st.session_state.evaluation_complete
-        and st.session_state.manuscript_path
-        and st.session_state.checklist_path
+        and st.session_state.manuscript_text  # use cached text, no file I/O needed
     ):
 
         st.markdown("---")
@@ -463,29 +464,37 @@ def main():
             status_text.markdown(f"**Processing item {current} of {total}**")
             current_item_display.info(f"💭 Thinking about: *{item_name}*")
 
-        # Read manuscript text
-        manuscript_text = extract_text_from_pdf(st.session_state.manuscript_path)
+        try:
+            # Use cached manuscript text — no file I/O after rerun
+            manuscript_text = st.session_state.manuscript_text
 
-        # Evaluate with checklist
-        review_results_path = TEMP_FOLDER / "review_results.json"
-        review_results = evaluate_manuscript_with_checklist(
-            checklist_items=st.session_state.checklist_items,
-            manuscript_text=manuscript_text,
-            output_path=str(review_results_path),
-            progress_callback=update_progress,
-        )
+            # Evaluate with checklist
+            review_results_path = TEMP_FOLDER / "review_results.json"
+            review_results = evaluate_manuscript_with_checklist(
+                checklist_items=st.session_state.checklist_items,
+                manuscript_text=manuscript_text,
+                output_path=str(review_results_path),
+                progress_callback=update_progress,
+            )
 
-        # Store results
-        st.session_state.review_results = review_results
-        st.session_state.evaluation_complete = True
+            # Store results
+            st.session_state.review_results = review_results
+            st.session_state.evaluation_complete = True
 
-        # Clear progress indicators
-        progress_bar.empty()
-        status_text.empty()
-        current_item_display.empty()
+            # Clear progress indicators
+            progress_bar.empty()
+            status_text.empty()
+            current_item_display.empty()
 
-        st.success(f"✅ Evaluation complete! Assessed {total_items} checklist items.")
-        st.rerun()
+            st.success(f"✅ Evaluation complete! Assessed {total_items} checklist items.")
+            st.rerun()
+
+        except Exception as e:
+            progress_bar.empty()
+            status_text.empty()
+            current_item_display.empty()
+            st.error(f"❌ Evaluation failed: {e}")
+            st.exception(e)
 
     # Display evaluation results if available
     if st.session_state.review_results and st.session_state.evaluation_complete:
@@ -525,10 +534,8 @@ def main():
             with st.spinner(
                 "Analyzing all results and generating final recommendation..."
             ):
-                # Read manuscript text for context
-                manuscript_text = extract_text_from_pdf(
-                    st.session_state.manuscript_path
-                )
+                # Use cached manuscript text
+                manuscript_text = st.session_state.manuscript_text
 
                 # Generate final consideration
                 final_consideration = generate_final_consideration(
