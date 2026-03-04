@@ -11,6 +11,7 @@ import json
 import os
 import yaml
 from dotenv import load_dotenv
+from logger import logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,7 +24,7 @@ def load_config():
         with open(config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"Warning: config.yaml not found at {config_path}. Using defaults.")
+        logger.warning(f"Warning: config.yaml not found at {config_path}. Using defaults.")
         return {
             'llm': {'provider': 'lm_studio', 'model': 'openai/gpt-oss-20b'},
             'lm_studio': {'base_url': 'http://127.0.0.1:1234'},
@@ -33,7 +34,7 @@ def load_config():
             'connection': {'timeout': 60}
         }
     except Exception as e:
-        print(f"Error loading config.yaml: {e}. Using defaults.")
+        logger.error(f"Error loading config.yaml: {e}. Using defaults.")
         return {
             'llm': {'provider': 'lm_studio', 'model': 'openai/gpt-oss-20b'},
             'lm_studio': {'base_url': 'http://127.0.0.1:1234'},
@@ -294,7 +295,7 @@ Provide a well-organized, structured checklist with clear bullet points that can
     messages = [{"role": "user", "content": user_prompt}]
     structured_checklist = call_llm_chat_completion(messages, system_prompt=system_prompt)
     
-    print(f"\nStructured Checklist from LLM:\n{structured_checklist}\n")
+    logger.info(f"\nStructured Checklist from LLM:\n{structured_checklist}\n")
     
     return structured_checklist
 
@@ -383,7 +384,7 @@ def evaluate_manuscript_with_checklist(
     review_results = []
     total_items = len(checklist_items)
     
-    print(f"\n🔍 Starting manuscript evaluation with {total_items} checklist items...\n")
+    logger.info(f"\n🔍 Starting manuscript evaluation with {total_items} checklist items...\n")
     
     for idx, item in enumerate(checklist_items, 1):
         item_name = item['item'][:60] + "..." if len(item['item']) > 60 else item['item']
@@ -392,7 +393,7 @@ def evaluate_manuscript_with_checklist(
         if progress_callback:
             progress_callback(idx, total_items, item_name)
         
-        print(f"[{idx}/{total_items}] Evaluating: {item_name}")
+        logger.info(f"[{idx}/{total_items}] Evaluating: {item_name}")
         
         # Get LLM evaluation
         llm_response = evaluate_manuscript_item(item, manuscript_text, idx, total_items)
@@ -414,9 +415,9 @@ def evaluate_manuscript_with_checklist(
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(review_results, f, indent=2, ensure_ascii=False)
-        print(f"\n✅ Review results saved to: {output_path}")
+        logger.success(f"\n✅ Review results saved to: {output_path}")
     except Exception as e:
-        print(f"⚠️ Warning: Could not save review results: {e}")
+        logger.warning(f"⚠️ Warning: Could not save review results: {e}")
     
     return review_results
 
@@ -439,7 +440,7 @@ def process_peer_review(
     manuscript_text = extract_text_from_pdf(manuscript_path)
     checklist_text = extract_text_from_pdf(checklist_path)
 
-    print(f"\nProcessing: {manuscript_name} ({len(manuscript_text)} chars) + {checklist_name} ({len(checklist_text)} chars)")
+    logger.info(f"\nProcessing: {manuscript_name} ({len(manuscript_text)} chars) + {checklist_name} ({len(checklist_text)} chars)")
 
     structured_checklist = process_checklist_with_llm(checklist_text)
 
@@ -454,10 +455,10 @@ def process_peer_review(
         checklist_json_path = Path(checklist_path).parent / "parsed_checklist.json"
         with open(checklist_json_path, "w", encoding="utf-8") as f:
             json.dump(checklist_items, f, indent=2, ensure_ascii=False)
-        print(f"\nSaved structured checklist to: {checklist_json_path}")
-        print(f"Total checklist items extracted: {len(checklist_items)}")
+        logger.success(f"\nSaved structured checklist to: {checklist_json_path}")
+        logger.info(f"Total checklist items extracted: {len(checklist_items)}")
     except Exception as e:
-        print(f"Warning: Could not save checklist JSON: {e}")
+        logger.warning(f"Warning: Could not save checklist JSON: {e}")
 
     # For now, return a formatted summary with structured checklist
     result = f"""
@@ -511,14 +512,13 @@ def generate_final_consideration(
     error_items = total_items - completed_items
 
     # Print sample of checklist items and evaluations (first 80 chars of item, first 150 chars of evaluation)
-    print("\n" + "="*80)
-    print("EVALUATION RESULTS SUMMARY")
+    summary_lines = ["\n" + "="*80, "EVALUATION RESULTS SUMMARY", "="*80]
     # TODO: check here. we wanna use all characters?? not just :150?
-    print("="*80)
     for r in review_results:
-        print(f"\n[{r['section']}] {r['checklist_item'][:80]}")
-        print(f"→ {r['llm_evaluation'][:150]}...")
-    print("="*80 + "\n")
+        summary_lines.append(f"\n[{r['section']}] {r['checklist_item'][:80]}")
+        summary_lines.append(f"→ {r['llm_evaluation'][:150]}...")
+    summary_lines.append("="*80 + "\n")
+    logger.info("\n".join(summary_lines))
     
     # Extract key evaluation points from ALL items
     evaluations_summary = "\n".join([
