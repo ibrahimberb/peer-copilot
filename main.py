@@ -295,6 +295,7 @@ def main():
         # Dummy button
         if st.button("🎯 Dummy Button", use_container_width=True):
             logger.info("hello lilly")
+            st.success("Dummy button clicked! Check console for log message.")
 
     # Main content - Review Results
     st.header("Review Results")
