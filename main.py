@@ -287,8 +287,8 @@ def main():
         st.markdown(f"**Status:** {manuscript_status}")
 
         uploaded_manuscript = st.file_uploader(
-            "Upload Manuscript (PDF)",
-            type=["pdf"],
+            "Upload Manuscript (PDF, DOCX)",
+            type=["pdf", "docx"],
             key="manuscript_uploader",
         )
 

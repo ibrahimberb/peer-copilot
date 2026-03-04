@@ -504,7 +504,7 @@ def process_peer_review(
     Returns:
         Tuple of (formatted result string, structured checklist data)
     """
-    manuscript_text = extract_text_from_pdf(manuscript_path)
+    manuscript_text = extract_text_from_file(manuscript_path)
     checklist_text = extract_text_from_pdf(checklist_path)
 
     print(
