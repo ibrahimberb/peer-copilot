@@ -1,7 +1,13 @@
 import streamlit as st
 from pathlib import Path
-from llm_engine import process_peer_review, extract_text_from_pdf, evaluate_manuscript_with_checklist, generate_final_consideration
+from llm_engine import (
+    process_peer_review,
+    extract_text_from_pdf,
+    evaluate_manuscript_with_checklist,
+    generate_final_consideration,
+)
 import shutil
+import yaml
 
 # ============================================================================
 # Demo Files Configuration
@@ -10,6 +16,45 @@ DEMO_MANUSCRIPT = "BurnRAG_draft.pdf"
 DEMO_CHECKLIST = "peer_review-checklist.pdf"
 DEMO_FOLDER = Path("demo")
 TEMP_FOLDER = Path("temp_uploads")
+
+
+# ============================================================================
+# LLM Configuration Functions
+# ============================================================================
+def update_llm_config(provider: str, model: str):
+    """Update the config.yaml file with new LLM provider settings."""
+    config_path = Path("config.yaml")
+
+    try:
+        # Load existing config
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+        # Update provider and model
+        config["llm"]["provider"] = provider
+        config["llm"]["model"] = model
+
+        # Save updated config
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        return True
+    except Exception as e:
+        st.error(f"Failed to update config: {e}")
+        return False
+
+
+def get_current_llm_config():
+    """Get current LLM configuration."""
+    config_path = Path("config.yaml")
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        return config["llm"]["provider"], config["llm"]["model"]
+    except Exception:
+        return "lm_studio", "openai/gpt-oss-20b"
+
 
 # ============================================================================
 # Page configuration
@@ -101,6 +146,48 @@ def main():
 
     # Sidebar - File Upload
     with st.sidebar:
+        # LLM Provider Selection
+        st.header("🤖 LLM Provider")
+
+        # Get current config
+        current_provider, current_model = get_current_llm_config()
+
+        # Map provider to display name
+        provider_map = {
+            "Local LLM": ("lm_studio", "openai/gpt-oss-20b"),
+            "OpenAI": ("openai", "gpt-5.1"),
+        }
+
+        # Determine current selection
+        current_selection = "Local LLM"
+        for display_name, (prov, mod) in provider_map.items():
+            if current_provider == prov:
+                current_selection = display_name
+                break
+
+        # Provider dropdown
+        selected_provider = st.selectbox(
+            "Select LLM Provider",
+            options=list(provider_map.keys()),
+            index=list(provider_map.keys()).index(current_selection),
+            key="llm_provider_selector",
+        )
+
+        # Update config if selection changed
+        provider_key, model_key = provider_map[selected_provider]
+        if current_provider != provider_key or current_model != model_key:
+            if update_llm_config(provider_key, model_key):
+                st.success(f"✅ Switched to {selected_provider}")
+                # Reload the config in llm_engine
+                import llm_engine
+
+                llm_engine.config = llm_engine.load_config()
+
+        # Show current model
+        st.caption(f"Model: `{model_key}`")
+
+        st.markdown("---")
+
         st.header("📄 Upload Files")
 
         # Demo Files Section
@@ -117,9 +204,7 @@ def main():
                 )
                 if file_bytes:
                     st.session_state.manuscript_file = file_bytes
-                    st.session_state.manuscript_path = str(
-                        TEMP_FOLDER / file_name
-                    )
+                    st.session_state.manuscript_path = str(TEMP_FOLDER / file_name)
                     st.success("Demo manuscript loaded!")
                     st.rerun()
 
@@ -127,14 +212,10 @@ def main():
             if st.button(
                 "✅ Demo Checklist", use_container_width=True, key="demo_checklist"
             ):
-                file_bytes, file_name = load_demo_file(
-                    DEMO_CHECKLIST, DEMO_CHECKLIST
-                )
+                file_bytes, file_name = load_demo_file(DEMO_CHECKLIST, DEMO_CHECKLIST)
                 if file_bytes:
                     st.session_state.checklist_file = file_bytes
-                    st.session_state.checklist_path = str(
-                        TEMP_FOLDER / file_name
-                    )
+                    st.session_state.checklist_path = str(TEMP_FOLDER / file_name)
                     st.success("Demo checklist loaded!")
                     st.rerun()
 
@@ -146,7 +227,8 @@ def main():
                 DEMO_MANUSCRIPT,
             )
             cl_bytes, cl_name = load_demo_file(
-                DEMO_CHECKLIST, DEMO_CHECKLIST,
+                DEMO_CHECKLIST,
+                DEMO_CHECKLIST,
             )
             if ms_bytes and cl_bytes:
                 st.session_state.manuscript_file = ms_bytes
@@ -202,14 +284,10 @@ def main():
 
         if both_files_ready:
             manuscript_name = (
-                uploaded_manuscript.name
-                if uploaded_manuscript
-                else DEMO_MANUSCRIPT
+                uploaded_manuscript.name if uploaded_manuscript else DEMO_MANUSCRIPT
             )
             checklist_name = (
-                uploaded_checklist.name
-                if uploaded_checklist
-                else DEMO_CHECKLIST
+                uploaded_checklist.name if uploaded_checklist else DEMO_CHECKLIST
             )
 
             if st.button("🚀 Start Review", use_container_width=True, type="primary"):
@@ -256,8 +334,10 @@ def main():
                         st.session_state.last_result = result
                         st.session_state.checklist_items = checklist_items
                         st.session_state.evaluation_complete = False
-                        
-                        st.success("✅ Checklist extracted! Now evaluating manuscript...")
+
+                        st.success(
+                            "✅ Checklist extracted! Now evaluating manuscript..."
+                        )
 
                         # Clean up temp files
                         if (
@@ -300,150 +380,159 @@ def main():
 
     if st.session_state.last_result:
         st.markdown(st.session_state.last_result)
-        
+
         # Show extracted checklist items (ALWAYS visible after extraction)
         if st.session_state.checklist_items:
             st.markdown("---")
             st.subheader("📋 Structured Checklist Items (Interactive)")
-            
-            with st.expander(f"View {len(st.session_state.checklist_items)} Checklist Items", expanded=True):
+
+            with st.expander(
+                f"View {len(st.session_state.checklist_items)} Checklist Items",
+                expanded=True,
+            ):
                 # Group by section
                 sections = {}
                 for item in st.session_state.checklist_items:
-                    section = item['section']
+                    section = item["section"]
                     if section not in sections:
                         sections[section] = []
                     sections[section].append(item)
-                
+
                 # Display by section
                 for section, items in sections.items():
                     st.markdown(f"**{section}**")
                     for idx, item in enumerate(items):
-                        indent = "  " if item['type'] == 'sub' else ""
-                        icon = "❓" if item['is_question'] else "📌"
+                        indent = "  " if item["type"] == "sub" else ""
+                        icon = "❓" if item["is_question"] else "📌"
                         st.markdown(f"{indent}{icon} {item['item']}")
                     st.markdown("")
-    
+
     # Auto-trigger evaluation BELOW the checklist display
-    if (st.session_state.checklist_items and 
-        not st.session_state.evaluation_complete and
-        st.session_state.manuscript_path and
-        st.session_state.checklist_path):
-        
+    if (
+        st.session_state.checklist_items
+        and not st.session_state.evaluation_complete
+        and st.session_state.manuscript_path
+        and st.session_state.checklist_path
+    ):
+
         st.markdown("---")
         st.header("🤖 Evaluating Manuscript")
-        
+
         # Progress tracking
         progress_bar = st.progress(0)
         status_text = st.empty()
         current_item_display = st.empty()
-        
+
         total_items = len(st.session_state.checklist_items)
-        
+
         def update_progress(current, total, item_name):
             progress = current / total
             progress_bar.progress(progress)
             status_text.markdown(f"**Processing item {current} of {total}**")
             current_item_display.info(f"💭 Thinking about: *{item_name}*")
-        
+
         # Read manuscript text
         manuscript_text = extract_text_from_pdf(st.session_state.manuscript_path)
-        
+
         # Evaluate with checklist
         review_results_path = TEMP_FOLDER / "review_results.json"
         review_results = evaluate_manuscript_with_checklist(
             checklist_items=st.session_state.checklist_items,
             manuscript_text=manuscript_text,
             output_path=str(review_results_path),
-            progress_callback=update_progress
+            progress_callback=update_progress,
         )
-        
+
         # Store results
         st.session_state.review_results = review_results
         st.session_state.evaluation_complete = True
-        
+
         # Clear progress indicators
         progress_bar.empty()
         status_text.empty()
         current_item_display.empty()
-        
+
         st.success(f"✅ Evaluation complete! Assessed {total_items} checklist items.")
         st.rerun()
-        
+
     # Display evaluation results if available
     if st.session_state.review_results and st.session_state.evaluation_complete:
         st.markdown("---")
         st.subheader("📊 Detailed Evaluation Results")
-        
+
         # Group results by section
         sections = {}
         for result in st.session_state.review_results:
-            section = result['section']
+            section = result["section"]
             if section not in sections:
                 sections[section] = []
             sections[section].append(result)
-        
+
         # Display by section with expandable cards
         for section, items in sections.items():
             with st.expander(f"📁 {section} ({len(items)} items)", expanded=False):
                 for result in items:
-                    item_icon = "❓" if result['is_question'] else "📌"
-                    status_icon = "✅" if result['status'] == 'completed' else "❌"
-                    
+                    item_icon = "❓" if result["is_question"] else "📌"
+                    status_icon = "✅" if result["status"] == "completed" else "❌"
+
                     st.markdown(f"**{item_icon} {result['checklist_item']}**")
-                    
+
                     # Display LLM evaluation
-                    if result['status'] == 'completed':
+                    if result["status"] == "completed":
                         st.markdown(f"**Evaluation:** {result['llm_evaluation']}")
                     else:
                         st.error(f"Error: {result['llm_evaluation']}")
-                    
+
                     st.markdown("---")
-        
+
         # Generate and display final consideration
         if st.session_state.final_consideration is None:
             st.markdown("---")
             st.header("🤖 Generating Final Consideration")
-            
-            with st.spinner("Analyzing all results and generating final recommendation..."):
+
+            with st.spinner(
+                "Analyzing all results and generating final recommendation..."
+            ):
                 # Read manuscript text for context
-                manuscript_text = extract_text_from_pdf(st.session_state.manuscript_path)
-                
+                manuscript_text = extract_text_from_pdf(
+                    st.session_state.manuscript_path
+                )
+
                 # Generate final consideration
                 final_consideration = generate_final_consideration(
                     review_results=st.session_state.review_results,
-                    manuscript_text=manuscript_text
+                    manuscript_text=manuscript_text,
                 )
-                
+
                 st.session_state.final_consideration = final_consideration
                 st.rerun()
-        
+
         # Display final consideration if available
         if st.session_state.final_consideration:
             st.markdown("---")
             st.header("🎯 Final Consideration")
-            
+
             final = st.session_state.final_consideration
-            
-            if final['status'] == 'completed':
+
+            if final["status"] == "completed":
                 # Determine color and emoji based on recommendation
-                recommendation = final['recommendation'].upper()
-                if recommendation == 'ACCEPT':
+                recommendation = final["recommendation"].upper()
+                if recommendation == "ACCEPT":
                     badge_color = "#10b981"  # Green
                     badge_emoji = "✅"
-                elif recommendation == 'MINOR REVISION':
+                elif recommendation == "MINOR REVISION":
                     badge_color = "#f59e0b"  # Amber
                     badge_emoji = "⚠️"
-                elif recommendation == 'MAJOR REVISION':
+                elif recommendation == "MAJOR REVISION":
                     badge_color = "#ef4444"  # Red
                     badge_emoji = "🔴"
                 else:  # REJECT
                     badge_color = "#dc2626"  # Dark Red
                     badge_emoji = "❌"
-                
+
                 # Display recommendation with styling
                 col1, col2 = st.columns([2, 1])
-                
+
                 with col1:
                     st.markdown(
                         f"""<div style="
@@ -455,20 +544,18 @@ def main():
                             font-size: 20px;
                             font-weight: bold;
                         ">{badge_emoji} {recommendation}</div>""",
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
-                
+
                 with col2:
-                    st.metric(
-                        "Confidence Level",
-                        f"{final['confidence']}%",
-                        delta=None
-                    )
-                
+                    st.metric("Confidence Level", f"{final['confidence']}%", delta=None)
+
                 st.markdown("### Reasoning")
-                st.info(final['reasoning'])
+                st.info(final["reasoning"])
             else:
-                st.error(f"Failed to generate final consideration: {final['reasoning']}")
+                st.error(
+                    f"Failed to generate final consideration: {final['reasoning']}"
+                )
     else:
         st.info(
             "Upload manuscript and checklist files, then click 'Start Review' to see results here."
