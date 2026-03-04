@@ -391,10 +391,6 @@ def main():
         else:
             st.info("👆 Please upload both files to start the review.")
 
-        # Dummy button
-        if st.button("🎯 Dummy Button", use_container_width=True):
-            print("hello lilly")
-
     # Main content - Review Results
     st.header("Review Results")
 
