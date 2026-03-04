@@ -4,6 +4,7 @@ This module handles the backend processing of uploaded documents.
 """
 
 from pathlib import Path
+import streamlit as st
 from typing import Optional, List, Dict
 import requests
 import re
@@ -353,6 +354,7 @@ Provide a well-organized, structured checklist with clear bullet points that can
     )
 
     print(f"\nStructured Checklist from LLM:\n{structured_checklist}\n")
+    st.info("Structured Checklist extracted from LLM.")
 
     return structured_checklist
 
@@ -449,6 +451,8 @@ def evaluate_manuscript_with_checklist(
         f"\n🔍 Starting manuscript evaluation with {total_items} checklist items...\n"
     )
 
+    st.info(f"Starting manuscript evaluation with {total_items} checklist items...")
+
     for idx, item in enumerate(checklist_items, 1):
         item_name = (
             item["item"][:60] + "..." if len(item["item"]) > 60 else item["item"]
@@ -509,6 +513,10 @@ def process_peer_review(
         f"\nProcessing: {manuscript_name} ({len(manuscript_text)} chars) + {checklist_name} ({len(checklist_text)} chars)"
     )
 
+    st.info(
+        f"Processing: {manuscript_name} ({len(manuscript_text)} chars) + {checklist_name} ({len(checklist_text)} chars)"
+    )
+
     structured_checklist = process_checklist_with_llm(checklist_text)
 
     if structured_checklist.startswith("[Error"):
@@ -524,7 +532,9 @@ def process_peer_review(
             json.dump(checklist_items, f, indent=2, ensure_ascii=False)
         print(f"\nSaved structured checklist to: {checklist_json_path}")
         print(f"Total checklist items extracted: {len(checklist_items)}")
+        st.info(f"Structured checklist saved to: {checklist_json_path} with {len(checklist_items)} items extracted.")
     except Exception as e:
+        st.error(f"Could not save structured checklist JSON: {e}")
         raise e
         print(f"Warning: Could not save checklist JSON: {e}")
 
@@ -580,6 +590,7 @@ def generate_final_consideration(
 
     # Print sample of checklist items and evaluations (first 80 chars of item, first 150 chars of evaluation)
     print("\n" + "=" * 80)
+    st.info("EVALUATION RESULTS SUMMARY")
     print("EVALUATION RESULTS SUMMARY")
     # TODO: check here. we wanna use all characters?? not just :150?
     print("=" * 80)
