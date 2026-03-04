@@ -147,7 +147,7 @@ def main():
     # Sidebar - File Upload
     with st.sidebar:
         # LLM Provider Selection
-        st.header("🤖 LLM Provider")
+        st.header("✨ LLM Provider")
 
         # Get current config
         current_provider, current_model = get_current_llm_config()
