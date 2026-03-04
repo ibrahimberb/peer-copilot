@@ -5,11 +5,68 @@ This module handles the backend processing of uploaded documents.
 
 from pathlib import Path
 from typing import Optional, List, Dict
-import mimetypes
 import requests
 import re
 import json
-import llm_config
+import os
+import yaml
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Load configuration from config.yaml
+def load_config():
+    """Load configuration from config.yaml file."""
+    config_path = Path(__file__).parent / "config.yaml"
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"Warning: config.yaml not found at {config_path}. Using defaults.")
+        return {
+            'llm': {'provider': 'lm_studio', 'model': 'openai/gpt-oss-20b'},
+            'lm_studio': {'base_url': 'http://127.0.0.1:1234'},
+            'openai': {'base_url': 'https://api.openai.com/v1'},
+            'endpoints': {'chat': '/v1/chat/completions'},
+            'generation': {'max_tokens': -1, 'temperature': 0.7, 'top_p': 1.0, 'stream': False},
+            'connection': {'timeout': 60}
+        }
+    except Exception as e:
+        print(f"Error loading config.yaml: {e}. Using defaults.")
+        return {
+            'llm': {'provider': 'lm_studio', 'model': 'openai/gpt-oss-20b'},
+            'lm_studio': {'base_url': 'http://127.0.0.1:1234'},
+            'openai': {'base_url': 'https://api.openai.com/v1'},
+            'endpoints': {'chat': '/v1/chat/completions'},
+            'generation': {'max_tokens': -1, 'temperature': 0.7, 'top_p': 1.0, 'stream': False},
+            'connection': {'timeout': 60}
+        }
+
+# Load configuration at module level
+config = load_config()
+
+
+def get_llm_base_url():
+    """Get the base URL for the configured LLM provider."""
+    provider = config['llm']['provider']
+    if provider == 'openai':
+        return config['openai']['base_url']
+    elif provider == 'lm_studio':
+        return config['lm_studio']['base_url']
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
+
+
+def get_api_key():
+    """Get the API key for the configured LLM provider."""
+    provider = config['llm']['provider']
+    if provider == 'openai':
+        return os.getenv('OPENAI_API_KEY')
+    elif provider == 'lm_studio':
+        # LM Studio typically doesn't need an API key
+        return os.getenv('LM_STUDIO_API_KEY')
+    return None
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -97,24 +154,31 @@ def call_llm_chat_completion(
             api_messages.append({"role": "system", "content": system_prompt})
         api_messages.extend(messages)
 
-        url = f"{llm_config.LLM_BASE_URL}{llm_config.CHAT_COMPLETIONS_ENDPOINT}"
+        # Build URL based on provider
+        base_url = get_llm_base_url()
+        chat_endpoint = config['endpoints']['chat']
+        url = f"{base_url}{chat_endpoint}"
+        
         headers = {"Content-Type": "application/json"}
-        if llm_config.LLM_API_KEY:
-            headers["Authorization"] = f"Bearer {llm_config.LLM_API_KEY}"
+        api_key = get_api_key()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
+        # Build payload with generation parameters
+        max_tokens = config['generation']['max_tokens']
         payload = {
-            "model": llm_config.LLM_MODEL,
+            "model": config['llm']['model'],
             "messages": api_messages,
-            "temperature": llm_config.TEMPERATURE,
-            "max_tokens": llm_config.MAX_TOKENS,
-            "stream": llm_config.STREAM,
+            "temperature": config['generation']['temperature'],
+            "max_tokens": max_tokens,
+            "stream": config['generation']['stream'],
         }
         
-        if llm_config.MAX_TOKENS > 0:
-            payload["top_p"] = llm_config.TOP_P
+        if max_tokens > 0:
+            payload["top_p"] = config['generation']['top_p']
 
         response = requests.post(
-            url, json=payload, headers=headers, timeout=llm_config.REQUEST_TIMEOUT
+            url, json=payload, headers=headers, timeout=config['connection']['timeout']
         )
         
         if response.status_code != 200:
@@ -132,7 +196,12 @@ def call_llm_chat_completion(
             return "[Error: No response from LLM]"
 
     except requests.exceptions.ConnectionError:
-        return f"[Error: Could not connect to LLM. Is LM Studio running at {llm_config.LLM_BASE_URL}?]"
+        provider = config['llm']['provider']
+        base_url = get_llm_base_url()
+        if provider == 'lm_studio':
+            return f"[Error: Could not connect to LLM. Is LM Studio running at {base_url}?]"
+        else:
+            return f"[Error: Could not connect to {provider} API at {base_url}]"
     except requests.exceptions.Timeout:
         return "[Error: LLM request timed out]"
     except requests.exceptions.RequestException as e:
