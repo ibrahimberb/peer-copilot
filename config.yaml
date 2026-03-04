@@ -1,6 +1,6 @@
 llm:
   provider: openai
-  model: gpt-4o-mini
+  model: gpt-5-mini
 lm_studio:
   base_url: http://127.0.0.1:1234
   endpoints:
@@ -25,3 +25,54 @@ connection:
 app:
   temp_folder: temp_uploads
   demo_folder: demo
+
+# Model-specific configurations
+models:
+  # OpenAI GPT-4 series (use max_tokens)
+  gpt-4o-mini:
+    token_param: max_tokens
+    temperature: 0.1
+  gpt-4o:
+    token_param: max_tokens
+    temperature: 0.1
+  
+  # OpenAI GPT-5 series (use max_completion_tokens, temperature must be 1)
+  gpt-5-nano:
+    token_param: max_completion_tokens
+    temperature: 1
+  gpt-5-mini:
+    token_param: max_completion_tokens
+    temperature: 1
+  gpt-5:
+    token_param: max_completion_tokens
+    temperature: 1
+  gpt-5.2:
+    token_param: max_completion_tokens
+    temperature: 1
+  
+  # Local LLM models (use max_tokens)
+  openai/gpt-oss-20b:
+    token_param: max_tokens
+    temperature: 0.1
+  llama-3.1-8b:
+    token_param: max_tokens
+    temperature: 0.1
+  mistral-7b:
+    token_param: max_tokens
+    temperature: 0.1
+  
+  # DeepSeek models (for future use)
+  deepseek-chat:
+    token_param: max_tokens
+    temperature: 0.1
+  deepseek-coder:
+    token_param: max_tokens
+    temperature: 0.1
+  
+  # Qwen models (for future use)
+  qwen-turbo:
+    token_param: max_tokens
+    temperature: 0.1
+  qwen-plus:
+    token_param: max_tokens
+    temperature: 0.1

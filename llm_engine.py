@@ -183,16 +183,28 @@ def call_llm_chat_completion(
             headers["Authorization"] = f"Bearer {api_key}"
 
         # Build payload with generation parameters
-        max_tokens = config["generation"]["max_tokens"]
+        max_tokens_value = config["generation"]["max_tokens"]
+        current_model = config["llm"]["model"]
+        
+        # Get model-specific token parameter name (default to max_tokens)
+        token_param_name = "max_tokens"
+        temperature = config["generation"]["temperature"]  # Default global temperature
+        
+        if "models" in config and current_model in config["models"]:
+            model_config = config["models"][current_model]
+            token_param_name = model_config.get("token_param", "max_tokens")
+            # Use model-specific temperature if defined
+            temperature = model_config.get("temperature", temperature)
+        
         payload = {
-            "model": config["llm"]["model"],
+            "model": current_model,
             "messages": api_messages,
-            "temperature": config["generation"]["temperature"],
-            "max_tokens": max_tokens,
+            "temperature": temperature,
+            token_param_name: max_tokens_value,
             "stream": config["generation"]["stream"],
         }
 
-        if max_tokens > 0:
+        if max_tokens_value > 0:
             payload["top_p"] = config["generation"]["top_p"]
 
         response = requests.post(

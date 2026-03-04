@@ -152,39 +152,59 @@ def main():
         # Get current config
         current_provider, current_model = get_current_llm_config()
 
-        # Map provider to display name
-        provider_map = {
-            "Local LLM": ("lm_studio", "openai/gpt-oss-20b"),
-            "OpenAI": ("openai", "gpt-4o-mini"),
+        # Map provider display names to provider keys
+        provider_display_map = {
+            "Local LLM": "lm_studio",
+            "OpenAI": "openai",
         }
 
-        # Determine current selection
-        current_selection = "Local LLM"
-        for display_name, (prov, mod) in provider_map.items():
-            if current_provider == prov:
-                current_selection = display_name
+        # Map provider to available models
+        provider_models = {
+            "lm_studio": ["openai/gpt-oss-20b", "llama-3.1-8b", "mistral-7b"],
+            "openai": ["gpt-4o-mini", "gpt-5-nano", "gpt-5-mini", "gpt-4o", "gpt-5", "gpt-5.2"],
+        }
+
+        # Determine current provider selection
+        current_provider_display = "Local LLM"
+        for display_name, prov_key in provider_display_map.items():
+            if current_provider == prov_key:
+                current_provider_display = display_name
                 break
 
         # Provider dropdown
-        selected_provider = st.selectbox(
+        selected_provider_display = st.selectbox(
             "Select LLM Provider",
-            options=list(provider_map.keys()),
-            index=list(provider_map.keys()).index(current_selection),
+            options=list(provider_display_map.keys()),
+            index=list(provider_display_map.keys()).index(current_provider_display),
             key="llm_provider_selector",
         )
 
+        provider_key = provider_display_map[selected_provider_display]
+
+        # Model dropdown based on selected provider
+        available_models = provider_models[provider_key]
+        
+        # Ensure current model is in the list, otherwise use first available
+        if current_model not in available_models:
+            model_index = 0
+        else:
+            model_index = available_models.index(current_model)
+
+        selected_model = st.selectbox(
+            "Select Model",
+            options=available_models,
+            index=model_index,
+            key="llm_model_selector",
+        )
+
         # Update config if selection changed
-        provider_key, model_key = provider_map[selected_provider]
-        if current_provider != provider_key or current_model != model_key:
-            if update_llm_config(provider_key, model_key):
-                st.success(f"✅ Switched to {selected_provider}")
+        if current_provider != provider_key or current_model != selected_model:
+            if update_llm_config(provider_key, selected_model):
+                st.success(f"✅ Switched to {selected_provider_display} - {selected_model}")
                 # Reload the config in llm_engine
                 import llm_engine
 
                 llm_engine.config = llm_engine.load_config()
-
-        # Show current model
-        st.caption(f"Model: `{model_key}`")
 
         st.markdown("---")
 
