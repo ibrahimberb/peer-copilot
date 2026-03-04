@@ -7,6 +7,7 @@ from llm_engine import (
     generate_final_consideration,
 )
 import shutil
+import tempfile
 import yaml
 
 # ============================================================================
@@ -15,7 +16,7 @@ import yaml
 DEMO_MANUSCRIPT = "BurnRAG_draft.pdf"
 DEMO_CHECKLIST = "peer_review-checklist.pdf"
 DEMO_FOLDER = Path("demo")
-TEMP_FOLDER = Path("temp_uploads")
+TEMP_FOLDER = Path(tempfile.gettempdir()) / "peer_copilot"
 
 
 # ============================================================================
@@ -106,7 +107,6 @@ def load_demo_file(demo_path: str, file_name: str):
     """Load a demo file from the demo folder."""
     demo_file_path = DEMO_FOLDER / demo_path
     if demo_file_path.exists():
-        TEMP_FOLDER.mkdir(exist_ok=True)
         temp_path = TEMP_FOLDER / file_name
 
         # Copy demo file to temp_uploads
@@ -143,6 +143,24 @@ def main():
         st.session_state.evaluation_complete = False
     if "final_consideration" not in st.session_state:
         st.session_state.final_consideration = None
+    if "storage_initialized" not in st.session_state:
+        st.session_state.storage_initialized = False
+
+    # ── Storage initialization (runs once per session) ──────────────────────
+    if not st.session_state.storage_initialized:
+        try:
+            TEMP_FOLDER.mkdir(parents=True, exist_ok=True)
+            init_file = TEMP_FOLDER / "init_check.txt"
+            from datetime import datetime
+            init_file.write_text(
+                f"peer_copilot storage initialized at {datetime.utcnow().isoformat()}Z\n",
+                encoding="utf-8",
+            )
+            st.session_state.storage_initialized = True
+            st.success(f"✅ Storage initialized and writable at `{TEMP_FOLDER}`")
+            print(f"✅ Storage initialized and writable at `{TEMP_FOLDER}`")
+        except Exception as e:
+            st.error(f"❌ Storage initialization failed: {e}")
 
     # Sidebar - File Upload
     with st.sidebar:
@@ -313,8 +331,6 @@ def main():
             if st.button("🚀 Start Review", use_container_width=True, type="primary"):
                 with st.spinner("Processing peer review..."):
                     try:
-                        TEMP_FOLDER.mkdir(exist_ok=True)
-
                         # Save manuscript
                         if uploaded_manuscript:
                             manuscript_path = TEMP_FOLDER / uploaded_manuscript.name
