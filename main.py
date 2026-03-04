@@ -155,7 +155,7 @@ def main():
         # Map provider to display name
         provider_map = {
             "Local LLM": ("lm_studio", "openai/gpt-oss-20b"),
-            "OpenAI": ("openai", "gpt-5.1"),
+            "OpenAI": ("openai", "gpt-4o-mini"),
         }
 
         # Determine current selection

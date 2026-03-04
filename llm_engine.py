@@ -24,35 +24,12 @@ def load_config():
         with open(config_path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"Warning: config.yaml not found at {config_path}. Using defaults.")
-        return {
-            "llm": {"provider": "lm_studio", "model": "openai/gpt-oss-20b"},
-            "lm_studio": {"base_url": "http://127.0.0.1:1234"},
-            "openai": {"base_url": "https://api.openai.com/v1"},
-            "endpoints": {"chat": "/v1/chat/completions"},
-            "generation": {
-                "max_tokens": -1,
-                "temperature": 0.7,
-                "top_p": 1.0,
-                "stream": False,
-            },
-            "connection": {"timeout": 60},
-        }
+        raise FileNotFoundError(
+            f"Warning: config.yaml not found at {config_path}. Using defaults."
+        )
     except Exception as e:
         print(f"Error loading config.yaml: {e}. Using defaults.")
-        return {
-            "llm": {"provider": "lm_studio", "model": "openai/gpt-oss-20b"},
-            "lm_studio": {"base_url": "http://127.0.0.1:1234"},
-            "openai": {"base_url": "https://api.openai.com/v1"},
-            "endpoints": {"chat": "/v1/chat/completions"},
-            "generation": {
-                "max_tokens": -1,
-                "temperature": 0.7,
-                "top_p": 1.0,
-                "stream": False,
-            },
-            "connection": {"timeout": 60},
-        }
+        raise e
 
 
 # Load configuration at module level
@@ -79,6 +56,29 @@ def get_api_key():
         # LM Studio typically doesn't need an API key
         return os.getenv("LM_STUDIO_API_KEY")
     return None
+
+
+def get_endpoint(endpoint_name: str) -> str:
+    """Get the endpoint path for the configured LLM provider.
+
+    Args:
+        endpoint_name: Name of the endpoint (e.g., 'chat', 'models', 'completions', 'embeddings')
+
+    Returns:
+        The endpoint path for the current provider
+    """
+    provider = config["llm"]["provider"]
+
+    # Try to get provider-specific endpoint
+    if provider in config and "endpoints" in config[provider]:
+        return config[provider]["endpoints"].get(endpoint_name, f"/{endpoint_name}")
+
+    # Fallback to global endpoints if they exist (backward compatibility)
+    if "endpoints" in config:
+        return config["endpoints"].get(endpoint_name, f"/{endpoint_name}")
+
+    # Default fallback
+    return f"/{endpoint_name}"
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -174,7 +174,7 @@ def call_llm_chat_completion(
 
         # Build URL based on provider
         base_url = get_llm_base_url()
-        chat_endpoint = config["endpoints"]["chat"]
+        chat_endpoint = get_endpoint("chat")
         url = f"{base_url}{chat_endpoint}"
 
         headers = {"Content-Type": "application/json"}
@@ -212,12 +212,14 @@ def call_llm_chat_completion(
                 raise RuntimeError(
                     f"LLM API returned error (Status {response.status_code}): {response.text}"
                 )
-        
+
         response_data = response.json()
         if "choices" in response_data and len(response_data["choices"]) > 0:
             return response_data["choices"][0]["message"]["content"]
         else:
-            raise ValueError("LLM API response missing 'choices' field or returned empty choices")
+            raise ValueError(
+                "LLM API response missing 'choices' field or returned empty choices"
+            )
 
     except requests.exceptions.ConnectionError as e:
         provider = config["llm"]["provider"]

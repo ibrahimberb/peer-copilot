@@ -1,18 +1,23 @@
 llm:
   provider: openai
-  model: gpt-5.1
+  model: gpt-4o-mini
 lm_studio:
   base_url: http://127.0.0.1:1234
+  endpoints:
+    chat: /v1/chat/completions
+    models: /v1/models
+    completions: /v1/completions
+    embeddings: /v1/embeddings
 openai:
   base_url: https://api.openai.com/v1
-endpoints:
-  chat: /v1/chat/completions
-  models: /v1/models
-  completions: /v1/completions
-  embeddings: /v1/embeddings
+  endpoints:
+    chat: /chat/completions
+    models: /models
+    completions: /completions
+    embeddings: /embeddings
 generation:
-  max_tokens: -1
-  temperature: 0.7
+  max_tokens: 4096
+  temperature: 0.1
   top_p: 1.0
   stream: false
 connection:
