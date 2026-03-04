@@ -2,7 +2,6 @@ import streamlit as st
 from pathlib import Path
 from llm_engine import process_peer_review, extract_text_from_pdf, evaluate_manuscript_with_checklist, generate_final_consideration
 import shutil
-from logger import logger
 
 # ============================================================================
 # Demo Files Configuration
@@ -294,8 +293,7 @@ def main():
 
         # Dummy button
         if st.button("🎯 Dummy Button", use_container_width=True):
-            logger.info("hello lilly")
-            st.success("Dummy button clicked! Check console for log message.")
+            print("hello lilly")
 
     # Main content - Review Results
     st.header("Review Results")
