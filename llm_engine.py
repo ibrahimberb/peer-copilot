@@ -525,6 +525,7 @@ def process_peer_review(
         print(f"\nSaved structured checklist to: {checklist_json_path}")
         print(f"Total checklist items extracted: {len(checklist_items)}")
     except Exception as e:
+        raise e
         print(f"Warning: Could not save checklist JSON: {e}")
 
     # For now, return a formatted summary with structured checklist

@@ -343,13 +343,19 @@ def main():
                                 TEMP_FOLDER / checklist_name
                             )
 
-                        # Process peer review
-                        result, checklist_items = process_peer_review(
-                            manuscript_path=st.session_state.manuscript_path,
-                            checklist_path=st.session_state.checklist_path,
-                            manuscript_name=manuscript_name,
-                            checklist_name=checklist_name,
-                        )
+                        try:
+
+                            # Process peer review
+                            result, checklist_items = process_peer_review(
+                                manuscript_path=st.session_state.manuscript_path,
+                                checklist_path=st.session_state.checklist_path,
+                                manuscript_name=manuscript_name,
+                                checklist_name=checklist_name,
+                            )
+
+                        except Exception as e:
+                            st.error(f"Error during peer review processing: {str(e)}")
+                            raise e
 
                         st.session_state.last_result = result
                         st.session_state.checklist_items = checklist_items
